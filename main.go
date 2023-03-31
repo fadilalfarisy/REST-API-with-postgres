@@ -131,16 +131,86 @@
 package main
 
 import (
-	"challenge-2/config"
+	"challenge-2/database"
 	"challenge-2/routers"
 
 	_ "github.com/lib/pq"
 )
 
 func main() {
-	config.Connection()
+	database.StartDB()
 
 	var PORT = ":3000"
 
 	routers.StartServer().Run(PORT)
 }
+
+// func CreateBook(nameBook, author string) {
+// 	db := database.GetDB()
+
+// 	Book := models.Book{
+// 		NameBook: nameBook,
+// 		Author:   author,
+// 	}
+
+// 	err := db.Create(&Book).Error
+
+// 	if err != nil {
+// 		fmt.Println("Error creating user data: ", err)
+// 		return
+// 	}
+
+// 	fmt.Println("New Book Data: ", Book)
+// }
+
+// func GetBookById(id uint) {
+// 	db := database.GetDB()
+
+// 	book := models.Book{}
+
+// 	err := db.First(&book, "id = ?", id).Error
+
+// 	if err != nil {
+// 		if errors.Is(err, gorm.ErrRecordNotFound) {
+// 			fmt.Println("Book data not found")
+// 			return
+// 		}
+// 		print("Error finding book: ", err)
+// 	}
+
+// 	fmt.Printf("Book Data: %v \n", book)
+// }
+
+// func UpdateBook(id uint, nameBook, author string) {
+// 	db := database.GetDB()
+
+// 	book := models.Book{}
+
+// 	err := db.First(&book).Where("id = ?", id).
+// 		Updates(models.Book{
+// 			NameBook: nameBook,
+// 			Author:   author,
+// 		}).Error
+
+// 	if err != nil {
+// 		fmt.Println("Error updating book data: ", err)
+// 		return
+// 	}
+
+// 	fmt.Printf("Update book's title: %v \n", book.NameBook)
+// }
+
+// func DeleteBook(id uint) {
+// 	db := database.GetDB()
+
+// 	book := models.Book{}
+
+// 	err := db.Where("id = ?", id).Delete(&book).Error
+
+// 	if err != nil {
+// 		fmt.Println("Error deleting book: ", err.Error())
+// 		return
+// 	}
+
+// 	fmt.Printf("Product with id %d has been successfully deleted", id)
+// }

@@ -1,60 +1,50 @@
 package controllers
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 
-	"challenge-2/config"
+	"challenge-2/database"
+	"challenge-2/models"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
-type Book struct {
-	BookID      int    `json:"book_id"`
-	Title       string `json:"title"`
-	Author      string `json:"author"`
-	Description string `json:"description"`
-}
-
-// CREATE TABLE books (
-// 	id SERIAL PRIMARY KEY,
-// 	title varchar(50) NOT NULL,
-// 	author varchar(50) NOT NULL,
-// 	description varchar(50) NOT NULL
-// )
-
 func CreateBook(ctx *gin.Context) {
-	var newBook = Book{}
+	db := database.GetDB()
+
+	var newBook = models.Book{}
 
 	if err := ctx.ShouldBindJSON(&newBook); err != nil {
 		ctx.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
 
-	sqlStatement := `
-	INSERT INTO books (title, author, description)
-	VALUES ($1, $2, $3)
-	Returning *
-	`
+	Book := models.Book{
+		NameBook: newBook.NameBook,
+		Author:   newBook.Author,
+	}
 
-	err := config.DB.QueryRow(sqlStatement, newBook.Title, newBook.Author, newBook.Description).
-		Scan(&newBook.BookID, &newBook.Title, &newBook.Author, &newBook.Description)
+	err := db.Create(&Book).Error
 
 	if err != nil {
-		panic(err)
+		fmt.Println("Error creating user data: ", err)
+		return
 	}
 
 	fmt.Printf("New Book Data: %+v \n", newBook)
 
 	ctx.JSON(http.StatusCreated, gin.H{
-		"book": newBook,
+		"book": Book,
 	})
 }
 
 func UpdateBooks(ctx *gin.Context) {
 	bookID := ctx.Param("bookID")
-	var newBook Book
+	var newBook = models.Book{}
 
 	var number int
 	var err error
@@ -74,20 +64,22 @@ func UpdateBooks(ctx *gin.Context) {
 		return
 	}
 
-	sqlStatement := `
-	UPDATE books
-	SET title = $2, author = $3, description = $4
-	WHERE id = $1;
-	`
-	res, err := config.DB.Exec(sqlStatement, number, newBook.Title, newBook.Author, newBook.Description)
-	if err != nil {
-		panic(err)
-	}
-	count, err := res.RowsAffected()
-	if err != nil {
-		panic(err)
+	db := database.GetDB()
+
+	book := models.Book{}
+
+	result := db.First(&book).Where("id = ?", number).
+		Updates(models.Book{
+			NameBook: newBook.NameBook,
+			Author:   newBook.Author,
+		})
+
+	if result.Error != nil {
+		fmt.Println("Error updating book data: ", err)
+		return
 	}
 
+	count := result.RowsAffected
 	if count == 0 {
 		ctx.JSON(http.StatusOK, gin.H{
 			"message": fmt.Sprintf("books with id %v failed to updated", number),
@@ -98,14 +90,12 @@ func UpdateBooks(ctx *gin.Context) {
 	fmt.Println("Updated data amount: ", count)
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"message": fmt.Sprintf("book with id %v has been successfully updated", bookID),
+		"book": book,
 	})
 }
 
 func GetBookById(ctx *gin.Context) {
 	bookID := ctx.Param("bookID")
-
-	var result = Book{}
 
 	var number int
 	var err error
@@ -120,71 +110,42 @@ func GetBookById(ctx *gin.Context) {
 		return
 	}
 
-	sqlStatement := fmt.Sprintf("SELECT * FROM books WHERE id = %d", number)
+	db := database.GetDB()
 
-	rows, err := config.DB.Query(sqlStatement)
+	book := models.Book{}
+
+	err = db.First(&book, "id = ?", number).Error
 
 	if err != nil {
-		panic(err)
-	}
-
-	defer rows.Close()
-
-	for rows.Next() {
-		var books = Book{}
-
-		err = rows.Scan(&books.BookID, &books.Title, &books.Author, &books.Description)
-
-		if err != nil {
-			panic(err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			ctx.JSON(http.StatusOK, gin.H{
+				"error_status":  "Data Not Found",
+				"error_message": fmt.Sprintf("book with id %v not found", number),
+			})
+			return
 		}
-
-		fmt.Println("Books datas: ", books)
-
-		result = books
-	}
-
-	if result.BookID == 0 {
-		ctx.JSON(http.StatusOK, gin.H{
-			"message": fmt.Sprintf("book with id %v not found", number),
-		})
-		return
+		print("Error finding book: ", err)
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"book": result,
+		"book": book,
 	})
 }
 
 func GetAllBooks(ctx *gin.Context) {
-	var result = []Book{}
+	db := database.GetDB()
 
-	sqlStatement := "SELECT * FROM books"
+	book := []models.Book{}
 
-	rows, err := config.DB.Query(sqlStatement)
+	err := db.Find(&book).Error
 
 	if err != nil {
-		panic(err)
+		fmt.Println("Error get user data: ", err)
+		return
 	}
-
-	defer rows.Close()
-
-	for rows.Next() {
-		var books = Book{}
-
-		err = rows.Scan(&books.BookID, &books.Title, &books.Author, &books.Description)
-
-		if err != nil {
-			panic(err)
-		}
-
-		result = append(result, books)
-	}
-
-	fmt.Println("Books datas: ", result)
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"books": result,
+		"book": book,
 	})
 }
 
@@ -204,18 +165,18 @@ func DeleteBook(ctx *gin.Context) {
 		return
 	}
 
-	sqlStatement := `
-	DELETE FROM books
-	WHERE id = $1;
-	`
-	res, err := config.DB.Exec(sqlStatement, number)
-	if err != nil {
-		panic(err)
+	db := database.GetDB()
+
+	book := models.Book{}
+
+	result := db.Where("id = ?", number).Delete(&book)
+
+	if result.Error != nil {
+		fmt.Println("Error deleting book: ", err.Error())
+		return
 	}
-	count, err := res.RowsAffected()
-	if err != nil {
-		panic(err)
-	}
+
+	count := result.RowsAffected
 
 	if count == 0 {
 		ctx.JSON(http.StatusOK, gin.H{
@@ -227,6 +188,6 @@ func DeleteBook(ctx *gin.Context) {
 	fmt.Println("Deleted data amount: ", count)
 
 	ctx.JSON(http.StatusCreated, gin.H{
-		"message": fmt.Sprintf("books with id %v has been successfully deleted", number),
+		"message": "Book deleted successfully",
 	})
 }
